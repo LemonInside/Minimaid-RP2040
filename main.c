@@ -10,65 +10,70 @@
  * Note: Shared signals are mapped to GPIO 25 (Internal LED) to save pins.
  */
 
-// Use 573 to "null" out a button you haven't wired yet
-#define UNUSED 573
+// Use 255 to "null" out a button you haven't wired yet
+#define UNUSED 255
 
 // 21 INPUT BUTTONS (Connect Pin to GND)
 // the null are nonstandard
-#define PIN_IN_P1_START    0
-#define PIN_IN_P1_UP       1
-#define PIN_IN_P1_DOWN     2
-#define PIN_IN_P1_LEFT     3
-#define PIN_IN_P1_RIGHT    4
-#define PIN_IN_P1_SEL_L    5
-#define PIN_IN_P1_SEL_R    6
+#define PIN_IN_P1_START    UNUSED
+#define PIN_IN_P1_UP       UNUSED
+#define PIN_IN_P1_DOWN     UNUSED
+#define PIN_IN_P1_LEFT     UNUSED
+#define PIN_IN_P1_RIGHT    UNUSED
+#define PIN_IN_P1_SEL_L    UNUSED
+#define PIN_IN_P1_SEL_R    UNUSED
 #define PIN_IN_P1_MENU_UP  UNUSED 
 #define PIN_IN_P1_MENU_DN  UNUSED 
 
-#define PIN_IN_P2_START    9
-#define PIN_IN_P2_UP       10
-#define PIN_IN_P2_DOWN     11
-#define PIN_IN_P2_LEFT     12
-#define PIN_IN_P2_RIGHT    13
-#define PIN_IN_P2_SEL_L    14
-#define PIN_IN_P2_SEL_R    15
+#define PIN_IN_P2_START    UNUSED
+#define PIN_IN_P2_UP       UNUSED
+#define PIN_IN_P2_DOWN     UNUSED
+#define PIN_IN_P2_LEFT     UNUSED
+#define PIN_IN_P2_RIGHT    UNUSED
+#define PIN_IN_P2_SEL_L    UNUSED
+#define PIN_IN_P2_SEL_R    UNUSED
 #define PIN_IN_P2_MENU_UP  UNUSED
 #define PIN_IN_P2_MENU_DN  UNUSED
 
-#define PIN_IN_COIN        16
-#define PIN_IN_TEST        17
-#define PIN_IN_SERVICE     18
+#define PIN_IN_COIN        UNUSED
+#define PIN_IN_TEST        UNUSED
+#define PIN_IN_SERVICE     UNUSED
 
 // 15 OUTPUT LIGHTS (LEDs/Optocouplers)
-#define L_P1_START       25
-#define L_P1_UP          UNUSED
-#define L_P1_DOWN        UNUSED
-#define L_P1_LEFT        UNUSED
-#define L_P1_RIGHT       UNUSED
+#define L_P1_START       7
+#define L_P1_UP          14
+#define L_P1_DOWN        10
+#define L_P1_LEFT        12
+#define L_P1_RIGHT       9
 
-#define L_P2_START       UNUSED
-#define L_P2_UP          UNUSED 
-#define L_P2_DOWN        UNUSED 
-#define L_P2_LEFT        UNUSED 
-#define L_P2_RIGHT       UNUSED 
+#define L_P2_START       27
+#define L_P2_UP          18 
+#define L_P2_DOWN        21 
+#define L_P2_LEFT        19 
+#define L_P2_RIGHT       22 
 
-#define L_MARQUEE_TL     UNUSED
-#define L_MARQUEE_TR     UNUSED
-#define L_MARQUEE_BL     UNUSED
-#define L_MARQUEE_BR     UNUSED 
-#define L_NEON           25 
+#define L_MARQUEE_TL     15
+#define L_MARQUEE_TR     5
+#define L_MARQUEE_BL     16
+#define L_MARQUEE_BR     28 
+#define L_NEON           0 
 
 // ======================================================================
 // Minimaid switches
 // ======================================================================
 bool keyboard_enabled = true;
 
-
 // Helper function to safely read pins that might be "null"
 bool is_pressed(uint8_t pin) {
     if (pin == UNUSED) return false;
     return !gpio_get(pin); // Low = Pressed (Pull-up)
 }
+
+// Cache the last sent reports
+uint8_t last_report_0[6] = {0};     //Keyboard EP
+uint8_t last_mm_report[8] = {0};    //HID EP
+
+
 
 // ======================================================================
 // INTERFACE 0 (EP 0x81): FAST KEYBOARD BITMASK
@@ -77,6 +82,7 @@ bool is_pressed(uint8_t pin) {
 void hid_task_interface_0() {
     //if (!tud_hid_n_ready(0)) return;
     if (!keyboard_enabled || !tud_hid_n_ready(0)) return;
+   // if (!keyboard_enabled) return;
 
     // Report Format: [0] Modifiers, [1] Reserved, [2-5] 32-bit Mask
   
@@ -108,7 +114,13 @@ void hid_task_interface_0() {
 //    if (is_pressed(PIN_IN_P1_MENU_DN)) report[5] |= 0x04;
 //    if (is_pressed(PIN_IN_P2_MENU_DN)) report[5] |= 0x08;
 
-    tud_hid_n_report(0, 0, report, sizeof(report));
+   // tud_hid_n_report(0, 0, report, sizeof(report));
+
+    //only send report if there's a change.
+    if (memcmp(report, last_report_0, sizeof(report)) != 0) {
+        tud_hid_n_report(0, 0, report, sizeof(report));
+        memcpy(last_report_0, report, sizeof(report));
+    }
     
 }
 
@@ -125,6 +137,8 @@ void hid_task_interface_1() {
     // The CE and 3B are the "Anchors". Everything else is the bitmask.
     // Index:                0     1     2     3     4     5     6     7
     uint8_t mm_report[8] = {0xCE, 0x00, 0x00, 0x00, 0x00, 0x3B, 0x00, 0x00};
+    // Index 0: ID/Header (0xCE)    ??
+    // Index 5: Dipsw/Footer (0x3B) ??
 
     // Based on your mapping: CE [1]=Sys, [2]=Pads, [3]=Right/Menu, [4]=Nonstandard, 3B
 
@@ -154,7 +168,13 @@ void hid_task_interface_1() {
 //    if (is_pressed(PIN_IN_P2_MENU_DN)) mm_report[4] |= 0x08;
 
     // Send the report to Interface 1 (Endpoint 0x83)
-    tud_hid_n_report(1, 0, mm_report, sizeof(mm_report));
+    //tud_hid_n_report(1, 0, mm_report, sizeof(mm_report));
+
+    // only send the report if there's a change.
+    if (memcmp(mm_report, last_mm_report, sizeof(mm_report)) != 0) {
+        tud_hid_n_report(1, 0, mm_report, sizeof(mm_report));
+        memcpy(last_mm_report, mm_report, sizeof(mm_report));
+    }
 }
 
 // 2. INCOMING: Set Lights from Host
@@ -164,7 +184,7 @@ void tud_hid_set_report_cb(uint8_t itf, uint8_t report_id, hid_report_type_t rep
         // KEYBOARD TOGGLE
         keyboard_enabled = (buffer[6] ? true : false);
         // Use onboard LED as indicator for keyboard enable or not. 
-        //gpio_put(25, (keyboard_enabled)); 
+//        gpio_put(25, (keyboard_enabled)); 
         
         // buffer[1]: Cabinet & Marquees
         gpio_put(L_MARQUEE_TL, (buffer[1] & 0x80)); 
@@ -227,7 +247,18 @@ int main() {
     init_all_gpio();
     tusb_init();
 
+ //   gpio_put(25, (keyboard_enabled)); 
+
     while (1) {
+  
+    static uint32_t last_blink_time = 0;
+    static bool led_state = false;
+
+    if (board_millis() - last_blink_time > 250) { // Blink every 250ms
+        last_blink_time = board_millis();
+        led_state = !led_state;
+        gpio_put(25, led_state);
+    }
         tud_task();
         hid_task_interface_0(); // FAST KB Inputs
         hid_task_interface_1(); // LEGACY MM Inputs
